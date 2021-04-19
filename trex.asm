@@ -1,66 +1,188 @@
-    PROCESSOR 6502
+	processor 6502
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; include required files with VCS register memory maping and macros
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	include "vcs.h"
+        include "macro.h"
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; declare variables starting from memory address $80
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg.u Variables
+        org $80
+        
+TrexXPos	byte		; player0 X-Pos
+TrexYPos	byte		; player0 Y-Pos
+CactusXPos	byte		; player1 X-Pos
+CactusYPos	byte		; player1 Y-Pos
+TrexSpritePtr	word		; pointer to player0 sprite lookup table
+TrexColorPtr	word		; pointer to player0 color lookup table
+CactusSpritePtr	word		; pointer to player1 sprite lookup table
+CactusColorPtr	word		; pointer to player1 color lookup table
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; include required files with VCS register memory mapping and macros
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    INCLUDE "vcs.h"
-    INCLUDE "macro.h"
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; declare the variables strating from memory address $80  
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    SEG.U Variables
-    ORG $80
-
-TrexXPos    byte
-CactusXPos  byte
-Random      byte
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; define constants
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-TREX_HEIGHT = 9             ; player0 sprite height(# rows in lookup  table)
-CACTUS_HEIGHT = 9           ; player1 sprite height(# rows in lookup table)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; start our ROM code at memory address $F000
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    SEG code
-    ORG $F000
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	seg Code
+        org $F000
+        
 Reset:
-    CLEAN_START             ; call macro to reset memory and registers
+	CLEAN_START		; call macro to reset memory and registers
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; initize RAM variables and TIA registers 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    LDA #0                  ;
-    STA TrexXPos            ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; initialize RAM variables and TIA register
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	lda #5
+        sta TrexYPos		; trex y-pos  = 5
+        
+        lda #10
+        sta TrexXPos		; trex x-pos = 10
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; initialize the pointers to the correct lookup table address
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        lda #<TrexSprite
+        sta TrexSpritePtr	; lo-byte pointer for Trex sprite lookup table
+        lda #>TrexSprite
+        sta TrexSpritePtr+1	; hi-byte pointer for Trex sprite lookup table
+        
+        lda #<TrexColor
+        sta TrexColorPtr	; lo-byte pointer for Trex color lookup table
+        lda #>TrexColor
+        sta TrexColorPtr+1	; hi-byte pointer for Trex color lookup table
 
-    LDA #50                 ;
-    STA CactusXPos          ;
+	lda #<CactusSprite
+        sta CactusSpritePtr	; lo-byte pointer for Trex sprite lookup table
+        lda #>CactusSprite
+        sta CactusSpritePtr+1	; hi-byte pointer for Trex sprite lookup table
+        
+        lda #<CactusColor
+        sta CactusColorPtr	; lo-byte pointer for Trex color lookup table
+        lda #>CactusColor
+        sta CactusColorPtr+1	; hi-byte pointer for Trex color lookup table
 
-    LDA #%11010100          ;
-    STA Random              ;
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; start the main display loop and frame rendering
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 StartFrame:
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; set background color 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    LDA #$0E                ; load color white to register A
-    STA COLUBK              ; store the A register to background color register
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; display VSYNC and VBLANK
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	lda #2
+	sta VBLANK		; turn on VBLANK
+	sta VSYNC		; turn on VSYNC
+	REPEAT 3
+		sta WSYNC	; display 3 recommended line of VSYNC
+	REPEND
+        lda #0
+        sta VSYNC		; turn off VSYNC
+        REPEAT 37
+        	sta WSYNC	; display 37 recommended line of VBLANK
+	REPEND            	
+        sta VBLANK
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; display the 192 visible scanline of our main game
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+GameVisibleScanline:
+	lda #$0E		
+        sta COLUBK		; set color background to white
+        
+        ldx #161		; x = 192(the x counts the number of remaining scanline
+.GameLineLoop:
+	sta WSYNC
+        dex			; x--
+        bne .GameLineLoop	; jump to .GameLineLoop until x <= 0
+        
+        ldx #1
+.SetOneLineBlack:
+	
+        ldy #$00
+        sty COLUBK		; set background color to black just for 1 line 
+	
+        sta WSYNC
+        dex
+        bne .etOneLineBlack
+        
+        lda #$0E		; set background color to white again
+        sta COLUBK
+        
+        ldx #30
+.NextRemainingScanline:
+	sta WSYNC
+        dex
+        bne .NextRemainingScanline
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; display overscan
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        lda #2
+        sta VBLANK		; turn VBLANK on
+        REPEAT 30
+        	sta WSYNC	; display 30 recommended lines of VBLANK overscan
+	REPEND               
+        lda #0
+        sta VBLANK		; turn of VBLANK
+        
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; loop back to start a brand new frame
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    JMP StartFrame          ; continue to dispay the next frame
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        jmp StartFrame		; continue to display the next frame
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; complete ROM size with exactly 4KB
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ORG $FFFC               ; move to position $FFFC in memory
-    word Reset              ; write 2 bytes with the program reset address
-    word Reset              ; write 2 bytes with the interruption vector
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; declare Rom lookup table
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+TrexSprite:
+	.byte #%00000000;$0E
+        .byte #%11101100;$0E
+        .byte #%11001001;$0E
+        .byte #%11011011;$0E
+        .byte #%10111100;$0E
+        .byte #%10000011;$0E
+        .byte #%11111111;$0E
+        .byte #%01111101;$0E
+        .byte #%00111111;$0E
+
+TrexColor:
+	.byte #$00;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        .byte #$0E;
+        
+
+CactusSprite:
+        .byte #%00111000;$00
+        .byte #%00010000;$00
+        .byte #%00111000;$00
+        .byte #%01010100;$00
+        .byte #%00010000;$00
+        .byte #%00111000;$00
+        .byte #%01010100;$00
+        .byte #%00010000;$00
+
+
+CactusColor:
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+        .byte #$00;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; complete the ROM size with exactly 4KB
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        org $FFFC		; move to position FFFC
+        word Reset		; write 2 byte with the program reset address
+        word Reset		; write 2 byte with the interuption vectorS
